@@ -1,24 +1,25 @@
-import env from "@/env";
 import {
   initializeCleanupService,
   stopCleanupService,
 } from "@/libs/cleanup-service";
 import {
+  addSubscription,
+  createSubscriptionFromDonationAndDiscordUser,
+  getSubscriptionByUsername,
+  initializeDB,
+} from "@/libs/db";
+import {
   addSubscriptionRoleToUser,
   findUserByUsername,
   initializeDiscordClient,
 } from "@/libs/discord";
-import { subscribeToNewDonationEvent } from "@/libs/donation-alerts";
 import {
-  addSubscriberToDb,
-  createSubscriberFromDonationAndDiscordUser,
-  getSubscriberRowByUsername,
-} from "@/libs/sheets";
-import { containsWord } from "@/utils";
+  subscribeToNewDonationEvent,
+  validateDonation,
+} from "@/libs/donation-alerts";
 
 /**
- * Main function
- * This function is the entry point of the application
+ * This main function is the entry point of the application
  * It initializes the services, subscribes to new donations,
  * validates the donations, adds subscription role to the user,
  * creates a subscriber object, and adds the subscriber to the database
@@ -26,43 +27,36 @@ import { containsWord } from "@/utils";
 async function main() {
   // Initializing services
   await initializeDiscordClient();
+  await initializeDB();
   await initializeCleanupService();
 
   // Listening to new donations
   subscribeToNewDonationEvent(async (donation) => {
-    const { username, amount, currency, message } = donation;
-
-    // Fetching user data from discord and database
-    const discordUser = await findUserByUsername(username);
-    const subscriber = await getSubscriberRowByUsername(username);
+    const { username } = donation;
 
     // Validating the donation
-    // 1. User should exist in discord
-    // 2. User should not be a subscriber already
-    // 3. Currency should be the same as the one in the env
-    // 4. Amount should be greater than or equal to the one in the env
-    // 5. Message should contain the word from the env
-    if (
-      !discordUser ||
-      subscriber ||
-      currency !== env.SUB_CURRENCY ||
-      amount < env.SUB_AMOUNT ||
-      !containsWord(message, env.SUB_CODE)
-    )
-      return;
-    // All validations passed
+    // 1. Currency should be the same as the one in the env
+    // 2. Amount should be greater than or equal to the one in the env
+    // 3. Message should contain the word from the env
+    // 4. User should exist in discord
+    // 5. User should not be a subscriber already
+    if (!validateDonation(donation)) return;
+    // Fetching user data from discord and database
+    const discordUser = await findUserByUsername(username);
+    const subscriptionRow = await getSubscriptionByUsername(username);
+    if (!discordUser || subscriptionRow) return;
 
     // Adding subscription role to the user in discord
     await addSubscriptionRoleToUser(discordUser);
 
-    // Creating subscriber object
-    const newSubscriber = createSubscriberFromDonationAndDiscordUser(
+    // Creating subscription object
+    const newSubscription = createSubscriptionFromDonationAndDiscordUser(
       donation,
       discordUser
     );
 
-    // Adding subscriber to the database
-    await addSubscriberToDb(newSubscriber);
+    // Adding subscription to the database
+    await addSubscription(newSubscription);
 
     console.info(`Added subscription for ${username}`);
   });

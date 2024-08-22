@@ -69,3 +69,8 @@ export function removeSubscriptionRoleFromUser(user: GuildMember) {
   if (!role) return null;
   return user.roles.remove(role);
 }
+
+export function getSubscribers() {
+  if (!role) return [];
+  return role.members.map((member) => member);
+}

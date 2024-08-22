@@ -1,6 +1,7 @@
 import env from "@/env";
 import type { Donation } from "@/schemas/donation";
 import type { DonationAlertsUser } from "@/types";
+import { containsWord } from "@/utils";
 import Centrifuge from "centrifuge";
 import WebSocket from "ws";
 
@@ -52,4 +53,15 @@ export async function subscribeToNewDonationEvent(
     console.error("Error connecting to DonationAlerts:", error);
     // Consider retrying or exiting the process
   }
+}
+
+export function validateDonation(donation: Donation) {
+  const { SUB_CURRENCY, SUB_AMOUNT, SUB_CODE } = env;
+  const { amount, currency, message } = donation;
+
+  return (
+    currency === SUB_CURRENCY &&
+    amount >= SUB_AMOUNT &&
+    containsWord(message, SUB_CODE)
+  );
 }

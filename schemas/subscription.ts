@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const subscriberSchema = z.object({
+const subscriptionSchema = z.object({
   username: z.string(),
   amount: z.number(),
   currency: z.string(),
@@ -10,4 +10,4 @@ const subscriberSchema = z.object({
   discord_id: z.string(),
 });
 
-export type Subscriber = z.infer<typeof subscriberSchema>;
+export type Subscription = z.infer<typeof subscriptionSchema>;
