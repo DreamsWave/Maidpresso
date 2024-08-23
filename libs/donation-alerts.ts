@@ -1,7 +1,8 @@
 import env from "@/env";
 import type { Donation } from "@/schemas/donation";
 import type { DonationAlertsUser } from "@/types";
-import { containsWord } from "@/utils";
+import { containsWord } from "@/utils/common";
+import logger from "@/utils/logger";
 import Centrifuge from "centrifuge";
 import WebSocket from "ws";
 
@@ -35,22 +36,20 @@ export async function getDonationAlertsUser(
 export async function subscribeToNewDonationEvent(
   callback: (donation: Donation) => void
 ) {
-  console.info("Connecting to DonationAlerts");
+  logger.debug("DonationAlerts: Connecting...");
   try {
     const user = await getDonationAlertsUser(env.DONATION_ALERTS_ACCESS_TOKEN);
     centrifuge.setToken(user.socket_connection_token);
     centrifuge.connect();
 
-    console.info("Listening to new donations");
+    logger.debug("DonationAlerts: Listening for new donations");
     centrifuge.subscribe(`$alerts:donation_${user.id}`, (message) => {
       const donation = message.data as Donation;
-      console.info(
-        `Received new donation: ${donation.username} ${donation.amount} ${donation.currency}`
-      );
+      logger.debug(donation, "DonationAlerts: Received new donation");
       callback(donation);
     });
   } catch (error) {
-    console.error("Error connecting to DonationAlerts:", error);
+    logger.error(error, "DonationAlerts: Error connecting");
     // Consider retrying or exiting the process
   }
 }

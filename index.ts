@@ -17,6 +17,7 @@ import {
   subscribeToNewDonationEvent,
   validateDonation,
 } from "@/libs/donation-alerts";
+import logger from "@/utils/logger";
 
 /**
  * This main function is the entry point of the application
@@ -25,6 +26,7 @@ import {
  * creates a subscriber object, and adds the subscriber to the database
  */
 async function main() {
+  logger.info("Starting Maidpresso...");
   // Initializing services
   await initializeDiscordClient();
   await initializeDB();
@@ -57,14 +59,14 @@ async function main() {
 
     // Adding subscription to the database
     await addSubscription(newSubscription);
-
-    console.info(`Added subscription for ${username}`);
+    logger.info(`Added subscription for ${username}`);
   });
+  logger.info("Maidpresso is running");
 }
 
 // Executing main function and handling unhandled errors
 main().catch((error) => {
-  console.error("Unhandled error:", error);
+  logger.fatal("Unhandled error:", error);
   stopCleanupService();
   process.exit(1);
 });

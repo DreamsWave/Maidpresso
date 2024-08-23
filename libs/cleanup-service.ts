@@ -5,59 +5,99 @@ import {
   getSubscribers,
   removeSubscriptionRoleFromUser,
 } from "@/libs/discord";
-import { isExpired } from "@/utils";
+import { isExpired } from "@/utils/expiration";
+import logger from "@/utils/logger";
+import type { GuildMember } from "discord.js";
+import type { GoogleSpreadsheetRow } from "google-spreadsheet";
 
 let cleanupServiceId: Timer;
-
-/* This function is responsible for cleaning up the subscription
-   and removing the subscription role from the user if the subscription
-   has expired or if the user is not subscribed anymore */
-export default async function cleanupService() {
-  if (!sheet) throw new Error("Spreadsheet not initialized");
-  const rows = await sheet.getRows();
-  const subscribers = getSubscribers();
-
-  /* Checking if user is not subscribed and removing subscription role if not */
-  console.info("Checking if user has subscribed");
-  for (const subscriber of subscribers) {
-    const isSubscribed = rows.some(
-      (row) => row.get("username") === subscriber.user.username
-    );
-    if (!isSubscribed) {
-      const discordUser = await findUserByUsername(subscriber.user.username);
-      if (discordUser) await removeSubscriptionRoleFromUser(discordUser);
-      console.info(`Removed subscription for ${subscriber.user.username}`);
-    }
-  }
-
-  /* Checking if subscription has expired and deleting it
-  from the database and removing subscription role from user */
-  for (const row of rows) {
-    if (isExpired(row.get("expires_at"))) {
-      const discordUser = await findUserByUsername(row.get("username"));
-      if (discordUser) await removeSubscriptionRoleFromUser(discordUser);
-      await row.delete();
-      console.info(`Removed subscription for ${row.get("username")}`);
-    }
-  }
-}
+const cleanTime =
+  Bun.env.NODE_ENV === "development"
+    ? 20000
+    : Number(env.CLEAN_SUBS_TIME_IN_MINUTES) * 60 * 1000;
 
 export async function initializeCleanupService() {
-  console.info("Initializing cleanup service");
+  logger.debug("CleanupService: Initializing...");
   try {
     await cleanupService();
-    cleanupServiceId = setInterval(
-      cleanupService,
-      Number(env.CLEAN_SUBS_TIME_IN_MINUTES) * 60 * 1000
-    );
-    console.info("Cleanup service initialized successfully");
+    cleanupServiceId = setInterval(cleanupService, cleanTime);
+    logger.debug("CleanupService: Initialized successfully");
   } catch (error) {
-    console.error("Error starting cleanup service:", error);
+    logger.error(error, "CleanupService: Error initializing");
+    throw error;
   }
   return cleanupServiceId;
 }
 
 export async function stopCleanupService() {
   clearInterval(cleanupServiceId);
-  console.info("Cleanup service stopped");
+  logger.debug("CleanupService: Stopped");
+}
+
+/* This function is responsible for cleaning up the subscription
+   and removing the subscription role from the user if the subscription
+   has expired or if the user is not subscribed anymore */
+export default async function cleanupService() {
+  logger.debug("CleanupService: Running...");
+  if (!sheet) throw new Error("CleanupService: Spreadsheet not initialized");
+
+  const rows = await sheet.getRows();
+  const subscribers = getSubscribers();
+
+  // Remove stale subscriptions from the sheet
+  await removeStaleSubscriptions(rows, subscribers);
+
+  // Remove subscription roles from users without a corresponding subscription
+  await removeOrphanedSubscriptionRoles(rows, subscribers);
+
+  // Check for expired subscriptions and remove them
+  await removeExpiredSubscriptions(rows);
+
+  logger.debug("CleanupService: Completed");
+}
+
+async function removeStaleSubscriptions(
+  rows: GoogleSpreadsheetRow[],
+  subscribers: GuildMember[]
+) {
+  for (const row of rows) {
+    const username = row.get("username");
+    const subscriber = subscribers.find(
+      (sub) => sub.user.username === username
+    );
+
+    if (!subscriber) {
+      // User not found in subscribers, remove the stale row
+      await row.delete();
+      logger.info(`Removed stale subscription for ${username} from the sheet`);
+    }
+  }
+}
+
+async function removeOrphanedSubscriptionRoles(
+  rows: GoogleSpreadsheetRow[],
+  subscribers: GuildMember[]
+) {
+  for (const subscriber of subscribers) {
+    const username = subscriber.user.username;
+    const subscribedRow = rows.find((row) => row.get("username") === username);
+
+    if (!subscribedRow) {
+      // No row found for the subscriber, remove the subscription role
+      await removeSubscriptionRoleFromUser(subscriber);
+      logger.info(`Removed discord role subscription for ${username}`);
+    }
+  }
+}
+
+async function removeExpiredSubscriptions(rows: GoogleSpreadsheetRow[]) {
+  for (const row of rows) {
+    if (isExpired(row.get("expires_at"))) {
+      const username = row.get("username");
+      const discordUser = await findUserByUsername(username);
+      if (discordUser) await removeSubscriptionRoleFromUser(discordUser);
+      await row.delete();
+      logger.info(`Removed expired subscription for ${username}`);
+    }
+  }
 }

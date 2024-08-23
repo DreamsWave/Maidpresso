@@ -1,7 +1,8 @@
 import env from "@/env";
 import type { Donation } from "@/schemas/donation";
 import type { Subscription } from "@/schemas/subscription";
-import { getExpirationDate } from "@/utils";
+import { getExpirationDate } from "@/utils/expiration";
+import logger from "@/utils/logger";
 import type { GuildMember } from "discord.js";
 import { JWT } from "google-auth-library";
 import {
@@ -13,7 +14,7 @@ import moment from "moment";
 export let sheet: GoogleSpreadsheetWorksheet | null = null;
 
 export async function initializeDB() {
-  console.info("Initializing database");
+  logger.debug("Database: Initializing...");
 
   const serviceAccountAuth = new JWT({
     email: env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
@@ -29,8 +30,9 @@ export async function initializeDB() {
       throw new Error("Sheet not found");
     }
     sheet = loadedSheet;
+    logger.debug("Database: Initialized successfully");
   } catch (error) {
-    console.error(error);
+    logger.error(error, "Database: Initialization error");
     throw error;
   }
 }
